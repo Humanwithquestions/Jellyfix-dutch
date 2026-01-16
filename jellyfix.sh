@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # JellyfinXArrStack_Fail2Ban - Debian Desktop Media Server Setup (Productie + Backup)
-# Gebruiker: Boss
+# User: Boss
 # -Gemaakt door TerminalX Group-
 
 set -e
@@ -9,21 +9,21 @@ set -e
 echo "Start setup van JellyfinXArrStack voor Debian Desktop (Productie + Backup)..."
 
 # Controleer of een commando bestaat
-commando_bestaat() {
+command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
 ####################################
-# Benodigde pakketten installeren
+# Vereiste pakketten
 ####################################
 sudo apt update
 sudo apt install -y ca-certificates curl gnupg lsb-release ufw unattended-upgrades fail2ban parted tar
 
 ####################################
-# Docker installeren
+# Docker installatie
 ####################################
-if ! commando_bestaat docker; then
-    echo "Docker wordt geïnstalleerd..."
+if ! command_exists docker; then
+    echo "Docker installeren..."
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
@@ -38,25 +38,33 @@ fi
 ####################################
 # Legacy Docker Compose fallback
 ####################################
-if ! commando_bestaat docker-compose; then
-    echo "Docker Compose (legacy) wordt geïnstalleerd..."
+if ! command_exists docker-compose; then
+    echo "Legacy docker-compose installeren..."
     sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
         -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
 ####################################
-# Tijdzone instellen
+# Tijdzone invoer veilig
 ####################################
-read -p "Voer je tijdzone in (bijv. Europe/Brussels): " TIJDZONE
-sudo timedatectl set-timezone "$TIJDZONE"
+while true; do
+    read -p "Voer je tijdzone in (bijv. Europe/Brussels): " TIJDZONE
+    if timedatectl list-timezones | grep -qx "$TIJDZONE"; then
+        sudo timedatectl set-timezone "$TIJDZONE"
+        echo "Tijdzone ingesteld op $TIJDZONE"
+        break
+    else
+        echo "Ongeldige tijdzone, probeer opnieuw."
+    fi
+done
 
 ####################################
-# PUID en PGID detecteren voor containers
+# Gebruikersinfo voor containers
 ####################################
-GEBRUIKER=$(whoami)
-PUID=$(id -u "$GEBRUIKER")
-PGID=$(id -g "$GEBRUIKER")
+USER_NAME=$(whoami)
+PUID=$(id -u "$USER_NAME")
+PGID=$(id -g "$USER_NAME")
 echo "Gebruik PUID=$PUID en PGID=$PGID voor containers."
 
 ####################################
@@ -66,20 +74,18 @@ sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
 sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null <<EOF
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin $GEBRUIKER --noclear %I \$TERM
+ExecStart=-/sbin/agetty --autologin $USER_NAME --noclear %I \$TERM
 EOF
 
 ####################################
-# Systeem slaap/idle voorkomen
+# Voorkom idle / slaapstand
 ####################################
 sudo sed -i 's/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
 sudo sed -i 's/#HandleLidSwitchDocked=suspend/HandleLidSwitchDocked=ignore/' /etc/systemd/logind.conf
 sudo sed -i 's/#IdleAction=suspend/IdleAction=ignore/' /etc/systemd/logind.conf
 sudo systemctl restart systemd-logind
-
 sudo setterm -blank 0 -powerdown 0 -powersave off
 
-# GNOME Desktop: schermvergrendeling en idle uitschakelen
 if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.screensaver lock-enabled false || true
     gsettings set org.gnome.desktop.session idle-delay 0 || true
@@ -90,42 +96,42 @@ fi
 ####################################
 echo "Beschikbare schijven:"
 lsblk -d -o NAME,SIZE,MODEL
-read -p "Selecteer de schijf voor de mediaserver (bijv. sdb): " SCHIJFNAAM
-SCHIJF="/dev/$SCHIJFNAAM"
+read -p "Selecteer schijf voor mediaserver (bijv. sdb): " SCHIJFNAAM
+DISK="/dev/$SCHIJFNAAM"
 
-if [ ! -b "$SCHIJF" ]; then
+if [ ! -b "$DISK" ]; then
     echo "Schijf niet gevonden!"
     exit 1
 fi
 
-echo "⚠ WAARSCHUWING: Alle data op $SCHIJF wordt verwijderd!"
-read -p "Typ 'JA' om door te gaan: " BEVESTIG
+echo "⚠ WAARSCHUWING: Alle data op $DISK wordt verwijderd!"
+read -p "Typ 'JA' om door te gaan: " CONFIRM
 
-if [[ "$BEVESTIG" != "JA" ]]; then
+if [[ "$CONFIRM" != "JA" ]]; then
     echo "Afgebroken."
     exit 1
 fi
 
-sudo wipefs -a "$SCHIJF"
-sudo parted -s "$SCHIJF" mklabel gpt
-sudo parted -s -a optimal "$SCHIJF" mkpart primary ext4 0% 100%
-PARTITIE="${SCHIJF}1"
-sudo mkfs.ext4 "$PARTITIE"
+sudo wipefs -a "$DISK"
+sudo parted -s "$DISK" mklabel gpt
+sudo parted -s -a optimal "$DISK" mkpart primary ext4 0% 100%
+PARTITION="${DISK}1"
+sudo mkfs.ext4 "$PARTITION"
 
 MOUNT="/mnt/media-server"
 sudo mkdir -p "$MOUNT"
-sudo mount "$PARTITIE" "$MOUNT"
+sudo mount "$PARTITION" "$MOUNT"
 
-UUID=$(sudo blkid -s UUID -o value "$PARTITIE")
+UUID=$(sudo blkid -s UUID -o value "$PARTITION")
 grep -q "$UUID" /etc/fstab || \
 echo "UUID=$UUID $MOUNT ext4 defaults 0 2" | sudo tee -a /etc/fstab
-echo "✅ Schijf $SCHIJF gepartitioneerd en gemount op $MOUNT"
+echo "✅ Schijf $DISK gepartitioneerd en gemount op $MOUNT"
 
 ####################################
-# Mediamappen aanmaken
+# Media folders
 ####################################
 sudo mkdir -p "$MOUNT/movies" "$MOUNT/series" "$MOUNT/config"
-sudo chown -R $GEBRUIKER:$GEBRUIKER "$MOUNT"
+sudo chown -R $USER_NAME:$USER_NAME "$MOUNT"
 
 ####################################
 # DNS
@@ -157,11 +163,11 @@ sudo systemctl enable unattended-upgrades fail2ban
 sudo systemctl start unattended-upgrades fail2ban
 
 ####################################
-# Docker netwerk voor isolatie
+# Docker netwerk
 ####################################
-NETWERK="media"
-if ! docker network inspect "$NETWERK" >/dev/null 2>&1; then
-    docker network create "$NETWERK"
+NETWORK="media"
+if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
+    docker network create "$NETWORK"
 fi
 
 ####################################
@@ -176,7 +182,7 @@ services:
     image: jellyfin/jellyfin:latest
     container_name: jellyfin
     networks:
-      - $NETWERK
+      - $NETWORK
     ports:
       - "8096:8096"
     volumes:
@@ -191,7 +197,7 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     networks:
-      - $NETWERK
+      - $NETWORK
     ports:
       - "9000:9000"
     volumes:
@@ -203,7 +209,7 @@ services:
     image: linuxserver/sonarr:latest
     container_name: sonarr
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -220,7 +226,7 @@ services:
     image: linuxserver/radarr:latest
     container_name: radarr
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -237,7 +243,7 @@ services:
     image: linuxserver/prowlarr:latest
     container_name: prowlarr
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -252,7 +258,7 @@ services:
     image: linuxserver/qbittorrent:latest
     container_name: qbittorrent
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -271,7 +277,7 @@ services:
     image: linuxserver/bazarr:latest
     container_name: bazarr
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -288,7 +294,7 @@ services:
     image: containrrr/watchtower:latest
     container_name: watchtower
     networks:
-      - $NETWERK
+      - $NETWORK
     environment:
       - TZ=$TIJDZONE
       - WATCHTOWER_CLEANUP=true
@@ -298,7 +304,7 @@ services:
     restart: unless-stopped
 
 networks:
-  $NETWERK:
+  $NETWORK:
     external: true
 EOL
 
@@ -306,7 +312,7 @@ EOL
 # Start stack
 ####################################
 cd "$MOUNT/config"
-if commando_bestaat docker-compose; then
+if command_exists docker-compose; then
     docker-compose pull
     docker-compose up -d
 else
@@ -315,7 +321,7 @@ else
 fi
 
 ####################################
-# Geautomatiseerde backups van configs
+# Backup container configs
 ####################################
 BACKUP_DIR="$MOUNT/backup"
 mkdir -p "$BACKUP_DIR"
@@ -323,13 +329,13 @@ mkdir -p "$BACKUP_DIR"
 BACKUP_SCRIPT="$MOUNT/config/backup-configs.sh"
 cat > "$BACKUP_SCRIPT" <<'EOL'
 #!/bin/bash
-# Backup van container configs
+# Backup container configs
 BACKUP_DIR="/mnt/media-server/backup"
 CONFIG_DIR="/mnt/media-server/config"
-DATUM=$(date +%F_%H-%M-%S)
+DATE=$(date +%F_%H-%M-%S)
 MAX_BACKUPS=7
 
-tar -czf "$BACKUP_DIR/config_$DATUM.tar.gz" -C "$CONFIG_DIR" .
+tar -czf "$BACKUP_DIR/config_$DATE.tar.gz" -C "$CONFIG_DIR" .
 cd "$BACKUP_DIR"
 ls -1tr | head -n -$MAX_BACKUPS | xargs -d '\n' rm -f 2>/dev/null || true
 EOL
@@ -338,7 +344,7 @@ chmod +x "$BACKUP_SCRIPT"
 
 sudo tee /etc/systemd/system/media-backup.service > /dev/null <<EOF
 [Unit]
-Description=Backup van mediaserver configs
+Description=Backup configs van mediaserver
 
 [Service]
 Type=oneshot
@@ -360,19 +366,19 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now media-backup.timer
 
-echo "✅ Dagelijkse automatische backups ingeschakeld in $BACKUP_DIR (laatste 7 behouden)"
+echo "✅ Dagelijkse automatische backups ingeschakeld in $BACKUP_DIR (laatste 7 bewaard)"
 
 echo "======================================"
 echo " JellyfinXArrStack_Fail2Ban (Debian Desktop, Productie + Backup)"
 echo "======================================"
 echo "✔ Schijf gepartitioneerd en gemount"
 echo "✔ Auto-login ingeschakeld"
-echo "✔ Systeem slaapt niet / schermvergrendeling uitgeschakeld"
+echo "✔ Slaapstand voorkomen / screensaver uitgeschakeld"
 echo "✔ Firewall actief"
-echo "✔ Fail2Ban actief"
+echo "✔ Fail2Ban draait"
 echo "✔ Automatische updates ingeschakeld"
-echo "✔ Docker netwerk aangemaakt: $NETWERK"
-echo "✔ Containers actief (met Watchtower automatische updates)"
+echo "✔ Docker netwerk aangemaakt: $NETWORK"
+echo "✔ Containers draaien (inclusief Watchtower automatische updates)"
 echo "✔ Dagelijkse automatische backups ingeschakeld"
 echo ""
 echo "Beheer stack:"
