@@ -1,34 +1,94 @@
-# Jellyfix-dutch
+# ✅ JellyfinXArrStack – Installatie & Setup Checklist (Nederlands)
 
-Deze setup jellyfix in het nederlands.
-Deze setup maakt alles klaar voor te streamen, en te downloaden.
-Het houd in:
--Jellyfin                  streaming;
--qBittorent                torrenting/downloading;
--Prowlarr                  Indexers;
--Radarr                    Films;
--Sonarr                    Series;
--watchtower                Automatische updates voor docker;
--docker, docker compose    Lxc's;
--Portainer                 Monitoren van docker tool;
--Unattended-upgrades       Systeem updates;
--Fail2ban                  Ssh brute force attacks blocker;
--Bazarr                    Voor ondertitels;
+## 1️⃣ Jellyfin – Media Server
+- [ ] Open WebUI: `http://<server-ip>:8096`
+- [ ] Server een naam geven
+- [ ] Admin gebruiker aanmaken
+- [ ] Extra gebruikers toevoegen (optioneel)
+- [ ] Bibliotheken toevoegen:
+  - `/mnt/media-server/movies` → Films
+  - `/mnt/media-server/series` → Series
+- [ ] VAAPI hardware transcoding inschakelen
+- [ ] Plugins installeren (optioneel, bv. OpenSubs)
 
-# Al deze diensten moet je zelf instellen.
-Jellyfin:                  server een naam geven, gebruikers, bibliotheken instellen, VAAPI transcoderen 
-qBittorent:                Koppelen met Radarr, Sonarr
-Radarr:                    Gebruiker, etc
-Sonarr:                    Gebruiker, etc
-Watchtower:                Gebruiker, etc
-docker:                    Normaal niks
-Portainer:                 Gebruiker, etc
-Unattended-upgrades:       Instellen van de conf bestand
-Fail2ban:                  Ook het instellen van het conf bestand
-Bazarr:                    Het instelllen van gebruiker en welke ontertitel indexers je wilt gebruiken, of eventueel Jellyfin>Plugins>opensubs
+## 2️⃣ qBittorrent – Download Client
+- [ ] Open WebUI: `http://<server-ip>:8080`
+- [ ] Koppelen met Sonarr en Radarr
+- [ ] Downloadmappen controleren
 
-# ;TDLR
-Dit script doet veel voor jou maar je moet wel de basics kennen om dit in te stellen.
-Je kan ook youtube tutorials gebruiken of ai om je te helpen.
-Vergeet je wachtwoord niet het is echt pijnlijk om het opnieuw in te stellen, schrijf het ergens op en gebruik mss ook hetzelfde paswoord wij elke dienst.
-Veel succes!
+## 3️⃣ Radarr – Films
+- [ ] Open WebUI: `http://<server-ip>:7878`
+- [ ] Gebruiker instellen (PUID/PGID)
+- [ ] Bibliotheekpad instellen: `/mnt/media-server/movies`
+- [ ] Download client koppelen: qBittorrent
+- [ ] Indexers toevoegen (TMDB, NZB, torrents)
+
+## 4️⃣ Sonarr – Series
+- [ ] Open WebUI: `http://<server-ip>:8989`
+- [ ] Gebruiker instellen (PUID/PGID)
+- [ ] Bibliotheekpad instellen: `/mnt/media-server/series`
+- [ ] Download client koppelen: qBittorrent
+- [ ] Indexers toevoegen (TVDB, Jackett)
+
+## 5️⃣ Watchtower – Automatische updates
+- [ ] Controleer logs: `docker logs -f watchtower`
+- [ ] Controleren of updates automatisch worden uitgevoerd
+
+## 6️⃣ Docker / Docker Compose
+- [ ] Controleer containers:  
+```bash
+cd /mnt/media-server/config
+docker compose ps
+
+    Controleer PUID/PGID rechten
+
+7️⃣ Portainer – Docker Management
+
+Open WebUI: http://<server-ip>:9000
+
+Admin gebruiker aanmaken
+
+    Stack bekijken of importeren
+
+8️⃣ Unattended-upgrades – Automatische updates
+
+Configuratiebestand controleren: /etc/apt/apt.conf.d/50unattended-upgrades
+
+    Eventueel automatische reboot inschakelen:
+
+Unattended-Upgrade::Automatic-Reboot "true";
+
+9️⃣ Fail2Ban – Beveiliging
+
+Jail configureren via /etc/fail2ban/jail.local
+
+    Status controleren:
+
+sudo fail2ban-client status
+sudo fail2ban-client status sshd
+
+🔟 Bazarr – Ondertitels
+
+Open WebUI: http://<server-ip>:6767
+
+Gebruiker instellen (PUID/PGID)
+
+Mappen instellen:
+
+    Films: /mnt/media-server/movies
+
+    Series: /mnt/media-server/series
+
+Ondertitel indexers toevoegen: OpenSubtitles, Addic7ed, etc.
+
+    Koppelen met Jellyfin (optioneel)
+
+💡 Extra tips
+
+    Check Watchtower logs en backups: /mnt/media-server/backup (laatste 7 backups)
+
+    Bij problemen: herstart een container:
+
+docker restart <container_naam>
+
+    Maak een lijst van gebruikers, API-keys en mappen voordat je begint
